@@ -13,7 +13,7 @@ env = gym.make('FrozenLake-v0')
 
 #Implement Q Table learning algorithm
 # Initialize table with all zeros
-Q = np.zeros([env.observation_space.n, env.action_space.n])
+Q = np.zeros([env.observation_space.n, env.action_space.n]) # shape will be 16x4
 # Set learning parameters
 lr =  0.8
 gamma = 0.95
@@ -45,4 +45,4 @@ for i in range(number_episodes):
 print("Score over time: " +  str(sum(rList)/number_episodes)) 
 print("Q-Table shape", Q.shape)     
 print("Final Q-Table Values")
-print(Q * 10)
+print(Q)
