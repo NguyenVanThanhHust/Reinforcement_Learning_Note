@@ -1,2 +1,2 @@
-# Reinforcement_Learning_Note
-This is result to learn Reinforcement Learning from tutorial in Medium
+# Reinforcement_Learning
+Learning Reinforcement Learning from tutorials and books
