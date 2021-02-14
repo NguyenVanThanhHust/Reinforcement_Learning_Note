@@ -39,6 +39,7 @@ class InputWrapper(gym.ObservationWrapper):
     def __init__(self, *args):
         super(InputWrapper, self).__init__(*args)
         assert isinstance(self.observation_space, gym.spaces.Box)
+        old_space = self.observation_space
         self.observation_space = gym.spaces.Box(self.observation(old_space.low), self.observation(old_space.high), dtype=np.float32)
 
     def observation(self, observation):
