@@ -47,7 +47,7 @@ class InputWrapper(gym.ObservationWrapper):
         new_obs = cv2.resize(observation, (IMAGE_SIZE, IMAGE_SIZE))
         # transform channel to 1st dim
         new_obs = np.moveaxis(new_obs, 2, 0)
-        return new_obs.atype(np.float32)
+        return new_obs.astype(np.float32)
 
 class Discriminator(nn.Module):
     def __init__(self, input_shape):
