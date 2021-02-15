@@ -11,13 +11,14 @@ HIDDEN_STATE_SIZE = 512
 EMBEDDING_DIM = 50
 
 class PhraseModel(nn.Module):
-    def __init__(self, emb_size, dict_size, hid_size):
-        super(PhraseModel).__init__()
+    def __init__(self, emb_size, dict_size, hidden_size):
+        super(PhraseModel, self).__init__()
+
         self.embed = nn.Embedding(num_embeddings=dict_size, embedding_dim=emb_size)
-        self.encoder = nn.LSTM(input_size=emb_size, hidden_size=hid_size, batch_first=True)
-        self.decoder = nn.LSTM(input_size=hid_size, hidden_size=hidden_size, batch_first=True)
+        self.encoder = nn.LSTM(input_size=emb_size, hidden_size=hidden_size, batch_first=True)
+        self.decoder = nn.LSTM(input_size=emb_size, hidden_size=hidden_size, batch_first=True)
         self.output = nn.Sequential(
-                        nn.Linear(hid_size, dict_size)            
+                        nn.Linear(hidden_size, dict_size)            
                     )
 
     def encode(self, x):
@@ -27,8 +28,8 @@ class PhraseModel(nn.Module):
     
     def get_encoded_item(self, encoded, index):
         out, cell = encoded[0], encoded[1]
-        return out[:, index:index+1].contiguos(), \
-                cell[:, index:index+1].contiguos()
+        return out[:, index:index+1].contiguous(), \
+                cell[:, index:index+1].contiguous()
             
     def decode_teacher(self, hidden_state, input_seq):
         output, hidden = self.decoder(input_seq, hidden_state)
@@ -36,9 +37,9 @@ class PhraseModel(nn.Module):
         return output
 
     def decode_one_sample(self, hidden_state, input_sample):
-        output, hidden = self.decoder(input_sample.unsqueeze(0). hidden)
+        output, hidden = self.decoder(input_sample.unsqueeze(0), hidden_state)
         output = self.output(output)
-        return out.squeeze(dim=0), hidden
+        return output.squeeze(dim=0), hidden
 
     def decode_chain_argmax(self, hidden, begin_emb, seq_len, stop_token=None):
         res_logits = []
@@ -46,8 +47,8 @@ class PhraseModel(nn.Module):
         cur_emb = begin_emb
         for _ in range(seq_len):
             out_logits, hidden = self.decode_one_sample(hidden, cur_emb)
-            out_token = torch.max(out_logits. dim=1)[1]
-            out_token_cpu = out_token.dta.cpu().numpy()[0]
+            out_token = torch.max(out_logits, dim=1)[1]
+            out_token_cpu = out_token.data.cpu().numpy()[0]
             cur_emb = self.embed(out_token)
 
             res_logits.append(out_logits)
@@ -70,8 +71,8 @@ class PhraseModel(nn.Module):
             
             cur_emb = self.embed(action_gpu)
 
-            out_token = torch.max(out_logits. dim=1)[1]
-            out_token_cpu = out_token.dta.cpu().numpy()[0]
+            out_token = torch.max(out_logits, dim=1)[1]
+            out_token_cpu = out_token.data.cpu().numpy()[0]
             cur_emb = self.embed(out_token)
 
             res_logits.append(out_logits)

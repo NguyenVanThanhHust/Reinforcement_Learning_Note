@@ -1,6 +1,6 @@
 import string
-from nltk.transtale import bleu_score
-from nltk.tokenize import TweetTokenize
+from nltk.translate import bleu_score
+from nltk.tokenize import TweetTokenizer
 
 def calc_bleu_many(cand_seq, ref_sequences):
     sf = bleu_score.SmoothingFunction()
