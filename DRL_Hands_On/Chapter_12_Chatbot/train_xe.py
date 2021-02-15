@@ -26,7 +26,7 @@ def run_test(test_data, net, end_token, device="cpu"):
     bleu_sum = 0.0
     bleu_count = 0
     for p1, p2 in test_data:
-        input_seq = model.pack_input(p1, net.emb, device)
+        input_seq = model.pack_input(p1, net.embed, device)
         enc = net.encode(input_seq)
         _, tokens = net.decode_chain_argmax(enc, input_seq.data[0:1],
                                             seq_len=data.MAX_TOKENS,
