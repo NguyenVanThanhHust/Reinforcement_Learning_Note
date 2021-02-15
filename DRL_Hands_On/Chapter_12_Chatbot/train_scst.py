@@ -32,7 +32,7 @@ def run_test(test_data, net, end_token, device="cpu"):
                                             seq_len=data.MAX_TOKENS,
                                             stop_token=end_token)
         ref_indices=[
-            indices[1:],
+            indices[1:]
             for indices in p2
         ]
         bleu_sum += utils.calc_bleu(tokens, ref_indices)
@@ -49,7 +49,7 @@ if __name__ == "__main__":
                         help="Enable cuda")
     parser.add_argument("-n", "--name", required=True, help="Name of the run")
     parser.add_argument("-l", "--load", required=True, help="Load model and continue in RL mode")
-    parser.add_argument("--samples", type=init, default=4, help="count of samples in prob mode")
+    parser.add_argument("--samples", type=int, default=4, help="count of samples in prob mode")
     parser.add_argument("--disable-skip", default=False, action='store_true', help="Disable skipping of samples with high agrmax BLEU")
     args = parser.parse_args()
     device = torch.device("cuda" if args.cuda else "cpu")
