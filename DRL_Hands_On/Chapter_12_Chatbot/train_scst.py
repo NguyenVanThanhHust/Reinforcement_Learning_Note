@@ -71,6 +71,7 @@ if __name__ == "__main__":
     train_data, test_data = data.split_train_test(train_data)
     log.info("Train set has %d phrases, test %d", len(train_data), len(test_data))
 
+    rev_emb_dict = {idx: word for word, idx in emb_dict.items()}
     net = model.PhraseModel(emb_size=model.EMBEDDING_DIM, dict_size=len(emb_dict),
                             hidden_size=model.HIDDEN_STATE_SIZE).to(device)
     log.info("Model: %s", net)
@@ -98,7 +99,7 @@ if __name__ == "__main__":
                 batch_idx += 1
                 optimiser.zero_grad()
 
-                input_seq,input_batch, output_batch = model.pack_batch_no_output(batch, net.embed, device)
+                input_seq,input_batch, output_batch = model.pack_batch_no_out(batch, net.embed, device)
                 enc = net.encode(input_seq)
 
                 net_policies = []
@@ -111,11 +112,11 @@ if __name__ == "__main__":
                     total_samples += 1
                     ref_indices = [
                         indices[1:]
-                        for indices in output_batch[idx]
+                        for indices in output_batch
                     ]
                     item_enc = net.get_encoded_item(enc, idx)
                     r_argmax, actions = net.decode_chain_argmax(item_enc, beg_embedding, data.MAX_TOKENS,
-                                                                stop_at_token=end_token)
+                                                                stop_token=end_token)
                     argmax_bleu = utils.calc_bleu_many(actions, ref_indices)
                     bleus_argmax.append(argmax_bleu)
 
@@ -132,7 +133,7 @@ if __name__ == "__main__":
 
                     for _ in range(args.samples):
                         r_sample, actions = net.decode_chain_sampling(item_enc, beg_embedding,
-                                                                      data.MAX_TOKENS, stop_at_token=end_token)
+                                                                      data.MAX_TOKENS, stop_token=end_token)
                         sample_bleu = utils.calc_bleu_many(actions, ref_indices)
 
                         if not dial_shown:

@@ -65,8 +65,8 @@ class PhraseModel(nn.Module):
         for _ in range(seq_len):
             out_logits, hidden = self.decode_one_sample(hidden, cur_emb)
             out_probs = F.softmax(out_logits, dim=1)
-            out_probs_cpu = out_probs.data.cpu()/numpy()[0]
-            action = int(np.random.choice(out_probs.shape[0]), p=out_probs)
+            out_probs_cpu = out_probs.cpu().detach().numpy()[0]
+            action = int(np.random.choice(out_probs_cpu.shape[0], p=out_probs_cpu))
             action_gpu = torch.LongTensor([action]).to(out_logits.device)
             
             cur_emb = self.embed(action_gpu)
