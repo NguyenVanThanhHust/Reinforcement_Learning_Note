@@ -30,7 +30,7 @@ def run_test(test_data, net, end_token, device="cpu"):
         enc = net.encode(input_seq)
         _, tokens = net.decode_chain_argmax(enc, input_seq.data[0:1],
                                             seq_len=data.MAX_TOKENS,
-                                            stop_at_token=end_token)
+                                            stop_token=end_token)
         bleu_sum += utils.calc_bleu(tokens, p2[1:])
         bleu_count += 1
     return bleu_sum / bleu_count
