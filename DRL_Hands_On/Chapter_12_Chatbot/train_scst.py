@@ -11,6 +11,8 @@ import torch
 import torch.optim as optim
 import torch.nn.functional as F
 
+import ptan
+
 SAVES_DIR = "saves"
 
 BATCH_SIZE = 16
