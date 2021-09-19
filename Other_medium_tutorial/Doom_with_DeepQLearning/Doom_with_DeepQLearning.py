@@ -51,6 +51,7 @@ if torch.cuda.is_available():
 else:
     DEVICE = torch.device('cpu')
 
+print("Using {}".format(DEVICE))
 
 def preprocess(img):
     """Down samples image to resolution"""
@@ -189,6 +190,9 @@ class DuelQNet(nn.Module):
             nn.Linear(64, available_actions_count)
         )
 
+            
+
+
     def forward(self, x):
         x = self.conv1(x)
         x = self.conv2(x)
@@ -226,6 +230,10 @@ class DQNAgent:
             print("Initializing new model")
             self.q_net = DuelQNet(action_size).to(DEVICE)
             self.target_net = DuelQNet(action_size).to(DEVICE)
+ 
+        if torch.cuda.is_available():
+            self.q_net = self.q_net.to(DEVICE)
+            self.target_net = self.target_net.to(DEVICE)
 
         self.opt = optim.SGD(self.q_net.parameters(), lr=self.lr)
 
