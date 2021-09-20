@@ -314,9 +314,9 @@ if __name__ == "__main__":
         print("======================================")
         print("Training finished. It's time to watch!")
 
-    # Reinitialize the game with window visible
+    # Reinitialize the game without window visible
     game.close()
-    game.set_window_visible(True)
+    game.set_window_visible(False)
     game.set_mode(Mode.ASYNC_PLAYER)
     game.init()
 
