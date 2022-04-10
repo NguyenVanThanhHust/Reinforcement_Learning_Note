@@ -60,7 +60,7 @@ class OutBlock(nn.Module):
         p = self.fc(p)
         p = self.logsoftmax(p).exp()
         return p, v
-        
+
 class AlphaZeroNet(nn.Module):
     def __init__(self, ):
         super(AlphaZeroNet, self).__init__()
@@ -71,7 +71,7 @@ class AlphaZeroNet(nn.Module):
 
     def forward(self, state):
         state = self.conv(state)
-        for i in range(19):
+        for block in range(19):
             state = getattr(self, "res_%i" % block)(state)
         state = self.outblock(state)
         return state

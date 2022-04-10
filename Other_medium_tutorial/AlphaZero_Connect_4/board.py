@@ -52,70 +52,141 @@ class Board():
 
             
     def check_winner(self, ):
-        # Check column winner
-        for i in range(self.board_width):
-            current_column = ""
-            current_column = current_column.join(self.current_board[:, i])
-            max_X = max(len(list(y)) for (c,y) in itertools.groupby(current_column) if c=='X')
-            max_O = max(len(list(y)) for (c,y) in itertools.groupby(current_column) if c=='O')
-            if max_X >= 4:
-                return 1
-            if max_O >= 4:
-                return 2
+        if self.player == 1:
+            for row in range(6):
+                for col in range(7):
+                    if self.current_board[row, col] != " ":
+                        # rows
+                        try:
+                            if self.current_board[row, col] == "O" and self.current_board[row + 1, col] == "O" and \
+                                self.current_board[row + 2, col] == "O" and self.current_board[row + 3, col] == "O":
+                                #print("row")
+                                return True
+                        except IndexError:
+                            next
+                        # columns
+                        try:
+                            if self.current_board[row, col] == "O" and self.current_board[row, col + 1] == "O" and \
+                                self.current_board[row, col + 2] == "O" and self.current_board[row, col + 3] == "O":
+                                #print("col")
+                                return True
+                        except IndexError:
+                            next
+                        # \ diagonal
+                        try:
+                            if self.current_board[row, col] == "O" and self.current_board[row + 1, col + 1] == "O" and \
+                                self.current_board[row + 2, col + 2] == "O" and self.current_board[row + 3, col + 3] == "O":
+                                #print("\\")
+                                return True
+                        except IndexError:
+                            next
+                        # / diagonal
+                        try:
+                            if self.current_board[row, col] == "O" and self.current_board[row + 1, col - 1] == "O" and \
+                                self.current_board[row + 2, col - 2] == "O" and self.current_board[row + 3, col - 3] == "O"\
+                                and (col-3) >= 0:
+                                #print("/")
+                                return True
+                        except IndexError:
+                            next
+        if self.player == 0:
+            for row in range(6):
+                for col in range(7):
+                    if self.current_board[row, col] != " ":
+                        # rows
+                        try:
+                            if self.current_board[row, col] == "X" and self.current_board[row + 1, col] == "X" and \
+                                self.current_board[row + 2, col] == "X" and self.current_board[row + 3, col] == "X":
+                                return True
+                        except IndexError:
+                            next
+                        # columns
+                        try:
+                            if self.current_board[row, col] == "X" and self.current_board[row, col + 1] == "X" and \
+                                self.current_board[row, col + 2] == "X" and self.current_board[row, col + 3] == "X":
+                                return True
+                        except IndexError:
+                            next
+                        # \ diagonal
+                        try:
+                            if self.current_board[row, col] == "X" and self.current_board[row + 1, col + 1] == "X" and \
+                                self.current_board[row + 2, col + 2] == "X" and self.current_board[row + 3, col + 3] == "X":
+                                return True
+                        except IndexError:
+                            next
+                        # / diagonal
+                        try:
+                            if self.current_board[row, col] == "X" and self.current_board[row + 1, col - 1] == "X" and \
+                                self.current_board[row + 2, col - 2] == "X" and self.current_board[row + 3, col - 3] == "X"\
+                                and (col-3) >= 0:
+                                return True
+                        except IndexError:
+                            next
 
-        # Check row winner
-        for i in range(self.board_height):
-            current_row = ""
-            current_row = current_row.join(self.current_board[i, :])
-            max_X = max(len(list(y)) for (c,y) in itertools.groupby(current_row) if c=='X')
-            max_O = max(len(list(y)) for (c,y) in itertools.groupby(current_row) if c=='O')
-            if max_X >= 4:
-                return 1
-            if max_O >= 4:
-                return 2
+        # # Check column winner
+        # for i in range(self.board_width):
+        #     current_column = ""
+        #     current_column = current_column.join(self.current_board[:, i])
+        #     max_X = max(len(list(y)) for (c,y) in itertools.groupby(current_column) if c=='X')
+        #     max_O = max(len(list(y)) for (c,y) in itertools.groupby(current_column) if c=='O')
+        #     if max_X >= 4:
+        #         return 1
+        #     if max_O >= 4:
+        #         return 2
 
-        # Check first diagonal winner
-        ## for start from most left column
-        for i in range(self.board_height):
-            current_diag = ""
-            diag_line = [self.current_board[k, k+i] for k in range(0, min(self.board_height, self.board_width))]
-            current_diag = current_diag.join(diag_line)
-            max_X = max(len(list(y)) for (c,y) in itertools.groupby(current_diag) if c=='X')
-            max_O = max(len(list(y)) for (c,y) in itertools.groupby(current_diag) if c=='O')
-            if max_X >= 4:
-                return 1
-            if max_O >= 4:
-                return 2
+        # # Check row winner
+        # for i in range(self.board_height):
+        #     current_row = ""
+        #     current_row = current_row.join(self.current_board[i, :])
+        #     max_X = max(len(list(y)) for (c,y) in itertools.groupby(current_row) if c=='X')
+        #     max_O = max(len(list(y)) for (c,y) in itertools.groupby(current_row) if c=='O')
+        #     if max_X >= 4:
+        #         return 1
+        #     if max_O >= 4:
+        #         return 2
 
-        ## for start from top row
-        for i in range(self.board_width):
-            current_diag = ""
-            diag_line = [self.current_board[k+i, k] for k in range(0, min(self.board_height, self.board_width))]
-            current_diag = current_diag.join(diag_line)
-            max_X = max(len(list(y)) for (c,y) in itertools.groupby(current_diag) if c=='X')
-            max_O = max(len(list(y)) for (c,y) in itertools.groupby(current_diag) if c=='O')
-            if max_X >= 4:
-                return 1
-            if max_O >= 4:
-                return 2
+        # # Check first diagonal winner
+        # ## for start from most left column
+        # for i in range(self.board_height):
+        #     current_diag = ""
+        #     diag_line = [self.current_board[k, k+i] for k in range(0, min(self.board_height, self.board_width))]
+        #     current_diag = current_diag.join(diag_line)
+        #     max_X = max(len(list(y)) for (c,y) in itertools.groupby(current_diag) if c=='X')
+        #     max_O = max(len(list(y)) for (c,y) in itertools.groupby(current_diag) if c=='O')
+        #     if max_X >= 4:
+        #         return 1
+        #     if max_O >= 4:
+        #         return 2
+
+        # ## for start from top row
+        # for i in range(self.board_width):
+        #     current_diag = ""
+        #     diag_line = [self.current_board[k+i, k] for k in range(0, min(self.board_height, self.board_width))]
+        #     current_diag = current_diag.join(diag_line)
+        #     max_X = max(len(list(y)) for (c,y) in itertools.groupby(current_diag) if c=='X')
+        #     max_O = max(len(list(y)) for (c,y) in itertools.groupby(current_diag) if c=='O')
+        #     if max_X >= 4:
+        #         return 1
+        #     if max_O >= 4:
+        #         return 2
 
 
-        # Check second diagonal winner
-        ## for start from most right column
-        ## Flip the board and do similar as from first diagonal
-        fliplr_board = np.fliplr(self.current_board)
-        for i in range(self.board_width):
-            current_diag = ""
-            diag_line = [fliplr_board[k+i, k] for k in range(0, min(self.board_height, self.board_width))]
-            current_diag = current_diag.join(diag_line)
-            max_X = max(len(list(y)) for (c,y) in itertools.groupby(current_diag) if c=='X')
-            max_O = max(len(list(y)) for (c,y) in itertools.groupby(current_diag) if c=='O')
-            if max_X >= 4:
-                return 1
-            if max_O >= 4:
-                return 2
+        # # Check second diagonal winner
+        # ## for start from most right column
+        # ## Flip the board and do similar as from first diagonal
+        # fliplr_board = np.fliplr(self.current_board)
+        # for i in range(self.board_width):
+        #     current_diag = ""
+        #     diag_line = [fliplr_board[k+i, k] for k in range(0, min(self.board_height, self.board_width))]
+        #     current_diag = current_diag.join(diag_line)
+        #     max_X = max(len(list(y)) for (c,y) in itertools.groupby(current_diag) if c=='X')
+        #     max_O = max(len(list(y)) for (c,y) in itertools.groupby(current_diag) if c=='O')
+        #     if max_X >= 4:
+        #         return 1
+        #     if max_O >= 4:
+        #         return 2
 
-        return 0
+        # return 0
 
     def actions(self, ):
         acts = []

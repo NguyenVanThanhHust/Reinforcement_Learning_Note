@@ -45,11 +45,11 @@ class UCTNode():
         self.child_priors = np.zeros([7], dtype=np.float32)
         self.child_total_value = np.zeros([7], dtype=np.float32)
         self.child_number_visits = np.zeros([7], dtype=np.float32)
-        self.action_indxes = []
+        self.action_indexes = []
 
     @property
     def num_visits(self):
-        return self.parent.child_number_visits[action]
+        return self.parent.child_number_visits[self.action]
 
     @num_visits.setter
     def num_visits(self, value):
@@ -57,14 +57,31 @@ class UCTNode():
     
     @property
     def total_value(self, ):
+        return self.parent.child_total_value[self.action]
+
+    @total_value.setter
+    def total_value(self, value):
         self.parent.child_total_value[self.action] = value
 
+    def child_Q(self):
+        return self.child_total_value / (1 + self.child_number_visits)
     
+    def child_U(self):
+        return math.sqrt(self.num_visits) * (
+            abs(self.child_priors) / (1 + self.child_number_visits))
     
+    def best_child(self):
+        if self.action_indexes != []:
+            bestmove = self.child_Q() + self.child_U()
+            bestmove = self.action_indexes[np.argmax(bestmove[self.action_indexes])]
+        else:
+            bestmove = np.argmax(self.child_Q() + self.child_U())
+        return bestmove
+
     def select_leaf(self):
         current = self
         while current.is_expanded:
-            best_move = current_board.best_child()
+            best_move = current.best_child()
             current = current.maybe_add_child(best_move)
         return current
 
@@ -75,9 +92,17 @@ class UCTNode():
         child_priors[action_idxs] = valid_child_priors
         return child_priors
 
-    def decode_n_move_pieces(self,board,move):
-        board.drop_piece(move)
+    def decode_n_move_pieces(self,board,action):
+        board.drop_piece(action)
         return board
+
+    def maybe_add_child(self, action):
+        if action not in self.children:
+            copy_board = copy.deepcopy(self.state) # make copy of board
+            copy_board = self.decode_n_move_pieces(copy_board,action)
+            self.children[action] = UCTNode(
+              copy_board, action, parent=self)
+        return self.children[action]
 
     def expand(self, child_priors):
         self.is_expanded = True 
@@ -114,7 +139,7 @@ class DummyNode(object):
 
     
 def UCT_search(game_state, num_reads, net, temp):
-    root = UCTNode(game_state, move=None, parent=DummyNode())
+    root = UCTNode(game_state, action=None, parent=DummyNode())
     for i in range(num_reads):
         leaf = root.select_leaf()
         encoded_s = ed.encode_board(leaf.state)
@@ -123,7 +148,7 @@ def UCT_search(game_state, num_reads, net, temp):
         child_priors, value_estimate = net(encoded_s)
         child_priors = child_priors.detach().cpu().numpy().reshape(-1)
         value_estimate = value_estimate.item()
-        if leaf.game.check_winner() == True or leaf.game.actions() == []: # if somebody won or draw
+        if leaf.state.check_winner() == True or leaf.state.actions() == []: # if somebody won or draw
             leaf.backup(value_estimate); continue
         leaf.expand(child_priors) # need to make sure valid moves
         leaf.backup(value_estimate)
@@ -131,11 +156,11 @@ def UCT_search(game_state, num_reads, net, temp):
 
 
 def get_policy(root, temperature):
-    return ((root.child_number_visits)**(1/temp))/sum(root.child_number_visits**(1/temp))
+    return ((root.child_number_visits)**(1/temperature))/sum(root.child_number_visits**(1/temperature))
 
 
-def do_decode_n_move_pieces(board,move):
-    board.drop_piece(move)
+def do_decode_n_move_pieces(board,action):
+    board.drop_piece(action)
     return board
 
 def MCTS_self_play(net, num_games, start_idx, cpu, args, iteration):
@@ -155,6 +180,8 @@ def MCTS_self_play(net, num_games, start_idx, cpu, args, iteration):
             root = UCT_search(current_board, 777, net, temperature)
             policy = get_policy(root, temperature)
             print("[CPU: %d]: Game %d POLICY:\n " % (cpu, idx), policy)
+            import pdb; pdb.set_trace()
+
             current_board = do_decode_n_move_pieces(current_board, 
                                                     np.random.choice(np.array([0,1,2,3,4,5,6]), \
                                                                      p = policy) )
@@ -189,7 +216,6 @@ def run_MCTS(args, start_idx, iteration):
         mp.set_start_method("spawn",force=True)
         net.share_memory()
         net.eval()
-    
         current_net_filename = os.path.join("./model_data/",\
                                         net_to_play)
         if os.path.isfile(current_net_filename):

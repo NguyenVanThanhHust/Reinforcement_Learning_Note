@@ -1,5 +1,6 @@
 DRL_Hands_On/*/runs/*
 Other_medium_tutorial/Doom_with_DeepQLearning/model-doom.pth
+Other_medium_tutorial/AlphaZero_Connect_4/model_data
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
