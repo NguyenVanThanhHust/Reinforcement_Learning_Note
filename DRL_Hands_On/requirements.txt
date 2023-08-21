@@ -1,0 +1,7 @@
+atari-py==0.2.6
+gym==0.17.3
+tensorboard==2.4.0
+tensorboardX==2.1
+nltk==3.5
+pybullet
+matplotlib
