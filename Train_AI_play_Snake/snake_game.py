@@ -88,3 +88,4 @@ class SnakeGame:
             self.new_direction = KEY_TO_DIRECTION(key)
             self.snake.feed_food(self.food_position)            
         return 
+    
