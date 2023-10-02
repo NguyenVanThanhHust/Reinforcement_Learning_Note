@@ -1,3 +1,5 @@
+My_own_Implementation/logs/
+papers/*
 *.dat
 DRL_Hands_On/*/runs/*
 Other_medium_tutorial/Doom_with_DeepQLearning/model-doom.pth
