@@ -1,422 +1,230 @@
-import os
-from collections import OrderedDict, deque, namedtuple
-from typing import Iterator, List, Tuple
+import gymnasium as gym
+import math
+import random
+import matplotlib
+import matplotlib.pyplot as plt
+from collections import namedtuple, deque
+from itertools import count
 
-import gym
-import numpy as np
-import pandas as pd
-import seaborn as sn
 import torch
-from IPython.core.display import display
-from pytorch_lightning import LightningModule, Trainer
-from pytorch_lightning.loggers import TensorBoardLogger
-from torch import Tensor, nn
-from torch.optim import Adam, Optimizer
-from torch.utils.data import DataLoader
-from torch.utils.data.dataset import IterableDataset
+import torch.nn as nn
+import torch.optim as optim
+import torch.nn.functional as F
 
-PATH_DATASETS = os.environ.get("PATH_DATASETS", ".")
+env = gym.make("CartPole-v1")
 
+# set up matplotlib
+is_ipython = 'inline' in matplotlib.get_backend()
+if is_ipython:
+    from IPython import display
+
+plt.ion()
+
+# if GPU is to be used
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+Transition = namedtuple('Transition',
+                        ('state', 'action', 'next_state', 'reward'))
+
+
+class ReplayMemory(object):
+
+    def __init__(self, capacity):
+        self.memory = deque([], maxlen=capacity)
+
+    def push(self, *args):
+        """Save a transition"""
+        self.memory.append(Transition(*args))
+
+    def sample(self, batch_size):
+        return random.sample(self.memory, batch_size)
+
+    def __len__(self):
+        return len(self.memory)
+    
 
 class DQN(nn.Module):
-    """Simple MLP network."""
 
-    def __init__(self, obs_size: int, n_actions: int, hidden_size: int = 128):
-        """
-        Args:
-            obs_size: observation/state size of the environment
-            n_actions: number of discrete actions available in the environment
-            hidden_size: size of hidden layers
-        """
-        super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(obs_size, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, n_actions),
-        )
+    def __init__(self, n_observations, n_actions):
+        super(DQN, self).__init__()
+        self.layer1 = nn.Linear(n_observations, 128)
+        self.layer2 = nn.Linear(128, 128)
+        self.layer3 = nn.Linear(128, n_actions)
 
+    # Called with either one element to determine next action, or a batch
+    # during optimization. Returns tensor([[left0exp,right0exp]...]).
     def forward(self, x):
-        return self.net(x.float())
+        x = F.relu(self.layer1(x))
+        x = F.relu(self.layer2(x))
+        return self.layer3(x)
     
+# BATCH_SIZE is the number of transitions sampled from the replay buffer
+# GAMMA is the discount factor as mentioned in the previous section
+# EPS_START is the starting value of epsilon
+# EPS_END is the final value of epsilon
+# EPS_DECAY controls the rate of exponential decay of epsilon, higher means a slower decay
+# TAU is the update rate of the target network
+# LR is the learning rate of the ``AdamW`` optimizer
+BATCH_SIZE = 128
+GAMMA = 0.99
+EPS_START = 0.9
+EPS_END = 0.05
+EPS_DECAY = 1000
+TAU = 0.005
+LR = 1e-4
 
-# Named tuple for storing experience steps gathered in training
-Experience = namedtuple(
-    "Experience",
-    field_names=["state", "action", "reward", "done", "new_state"],
-)
+# Get number of actions from gym action space
+n_actions = env.action_space.n
+# Get the number of state observations
+state, info = env.reset()
+n_observations = len(state)
 
-class ReplayBuffer:
-    """Replay Buffer for storing past experiences allowing the agent to learn from them.
+policy_net = DQN(n_observations, n_actions).to(device)
+target_net = DQN(n_observations, n_actions).to(device)
+target_net.load_state_dict(policy_net.state_dict())
 
-    Args:
-        capacity: size of the buffer
-    """
-
-    def __init__(self, capacity: int) -> None:
-        self.buffer = deque(maxlen=capacity)
-
-    def __len__(self) -> None:
-        return len(self.buffer)
-
-    def append(self, experience: Experience) -> None:
-        """Add experience to the buffer.
-
-        Args:
-            experience: tuple (state, action, reward, done, new_state)
-        """
-        self.buffer.append(experience)
-
-    def sample(self, batch_size: int) -> Tuple:
-        indices = np.random.choice(len(self.buffer), batch_size, replace=False)
-        states, actions, rewards, dones, next_states = zip(*(self.buffer[idx] for idx in indices))
-
-        return (
-            np.array(states),
-            np.array(actions),
-            np.array(rewards, dtype=np.float32),
-            np.array(dones, dtype=bool),
-            np.array(next_states),
-        )
-    
-class RLDataset(IterableDataset):
-    """Iterable Dataset containing the ExperienceBuffer which will be updated with new experiences during training.
-
-    Args:
-        buffer: replay buffer
-        sample_size: number of experiences to sample at a time
-    """
-
-    def __init__(self, buffer: ReplayBuffer, sample_size: int = 200) -> None:
-        self.buffer = buffer
-        self.sample_size = sample_size
-
-    def __iter__(self) -> Iterator[Tuple]:
-        states, actions, rewards, dones, new_states = self.buffer.sample(self.sample_size)
-        for i in range(len(dones)):
-            yield states[i], actions[i], rewards[i], dones[i], new_states[i]
+optimizer = optim.AdamW(policy_net.parameters(), lr=LR, amsgrad=True)
+memory = ReplayMemory(10000)
 
 
-class Agent:
-    """Base Agent class handeling the interaction with the environment."""
+steps_done = 0
 
-    def __init__(self, env: gym.Env, replay_buffer: ReplayBuffer) -> None:
-        """
-        Args:
-            env: training environment
-            replay_buffer: replay buffer storing experiences
-        """
-        self.env = env
-        self.replay_buffer = replay_buffer
-        self.reset()
-        self.state = self.env.reset()
 
-    def reset(self) -> None:
-        """Resents the environment and updates the state."""
-        self.state = self.env.reset()
-
-    def get_action(self, net: nn.Module, epsilon: float, device: str) -> int:
-        """Using the given network, decide what action to carry out using an epsilon-greedy policy.
-
-        Args:
-            net: DQN network
-            epsilon: value to determine likelihood of taking a random action
-            device: current device
-
-        Returns:
-            action
-        """
-        if np.random.random() < epsilon:
-            action = self.env.action_space.sample()
-        else:
-            state = torch.tensor([self.state])
-
-            if device not in ["cpu"]:
-                state = state.cuda(device)
-
-            q_values = net(state)
-            _, action = torch.max(q_values, dim=1)
-            action = int(action.item())
-
-        return action
-
-    @torch.no_grad()
-    def play_step(
-        self,
-        net: nn.Module,
-        epsilon: float = 0.0,
-        device: str = "cpu",
-    ) -> Tuple[float, bool]:
-        """Carries out a single interaction step between the agent and the environment.
-
-        Args:
-            net: DQN network
-            epsilon: value to determine likelihood of taking a random action
-            device: current device
-
-        Returns:
-            reward, done
-        """
-
-        action = self.get_action(net, epsilon, device)
-
-        # do step in the environment
-        new_state, reward, done, _ = self.env.step(action)
-
-        exp = Experience(self.state, action, reward, done, new_state)
-
-        self.replay_buffer.append(exp)
-
-        self.state = new_state
-        if done:
-            self.reset()
-        return reward, done
-    
-
-class Agent:
-    """Base Agent class handeling the interaction with the environment."""
-
-    def __init__(self, env: gym.Env, replay_buffer: ReplayBuffer) -> None:
-        """
-        Args:
-            env: training environment
-            replay_buffer: replay buffer storing experiences
-        """
-        self.env = env
-        self.replay_buffer = replay_buffer
-        self.reset()
-        self.state = self.env.reset()
-
-    def reset(self) -> None:
-        """Resents the environment and updates the state."""
-        self.state = self.env.reset()
-
-    def get_action(self, net: nn.Module, epsilon: float, device: str) -> int:
-        """Using the given network, decide what action to carry out using an epsilon-greedy policy.
-
-        Args:
-            net: DQN network
-            epsilon: value to determine likelihood of taking a random action
-            device: current device
-
-        Returns:
-            action
-        """
-        if np.random.random() < epsilon:
-            action = self.env.action_space.sample()
-        else:
-            state = torch.tensor([self.state])
-
-            if device not in ["cpu"]:
-                state = state.cuda(device)
-
-            q_values = net(state)
-            _, action = torch.max(q_values, dim=1)
-            action = int(action.item())
-
-        return action
-
-    @torch.no_grad()
-    def play_step(
-        self,
-        net: nn.Module,
-        epsilon: float = 0.0,
-        device: str = "cpu",
-    ) -> Tuple[float, bool]:
-        """Carries out a single interaction step between the agent and the environment.
-
-        Args:
-            net: DQN network
-            epsilon: value to determine likelihood of taking a random action
-            device: current device
-
-        Returns:
-            reward, done
-        """
-
-        action = self.get_action(net, epsilon, device)
-
-        # do step in the environment
-        new_state, reward, done, _ = self.env.step(action)
-
-        exp = Experience(self.state, action, reward, done, new_state)
-
-        self.replay_buffer.append(exp)
-
-        self.state = new_state
-        if done:
-            self.reset()
-        return reward, done
-    
-class DQNLightning(LightningModule):
-    """Basic DQN Model."""
-
-    def __init__(
-        self,
-        batch_size: int = 16,
-        lr: float = 1e-2,
-        env: str = "CartPole-v1",
-        gamma: float = 0.99,
-        sync_rate: int = 10,
-        replay_size: int = 1000,
-        warm_start_size: int = 1000,
-        eps_last_frame: int = 1000,
-        eps_start: float = 1.0,
-        eps_end: float = 0.01,
-        episode_length: int = 200,
-        warm_start_steps: int = 1000,
-    ) -> None:
-        """
-        Args:
-            batch_size: size of the batches")
-            lr: learning rate
-            env: gym environment tag
-            gamma: discount factor
-            sync_rate: how many frames do we update the target network
-            replay_size: capacity of the replay buffer
-            warm_start_size: how many samples do we use to fill our buffer at the start of training
-            eps_last_frame: what frame should epsilon stop decaying
-            eps_start: starting value of epsilon
-            eps_end: final value of epsilon
-            episode_length: max length of an episode
-            warm_start_steps: max episode reward in the environment
-        """
-        super().__init__()
-        self.save_hyperparameters()
-
-        self.env = gym.make(self.hparams.env)
-        obs_size = self.env.observation_space.shape[0]
-        n_actions = self.env.action_space.n
-
-        self.net = DQN(obs_size, n_actions)
-        self.target_net = DQN(obs_size, n_actions)
-
-        self.buffer = ReplayBuffer(self.hparams.replay_size)
-        self.agent = Agent(self.env, self.buffer)
-        self.total_reward = 0
-        self.episode_reward = 0
-        self.populate(self.hparams.warm_start_steps)
-
-    def populate(self, steps: int = 1000) -> None:
-        """Carries out several random steps through the environment to initially fill up the replay buffer with
-        experiences.
-
-        Args:
-            steps: number of random steps to populate the buffer with
-        """
-        for _ in range(steps):
-            self.agent.play_step(self.net, epsilon=1.0)
-
-    def forward(self, x: Tensor) -> Tensor:
-        """Passes in a state x through the network and gets the q_values of each action as an output.
-
-        Args:
-            x: environment state
-
-        Returns:
-            q values
-        """
-        output = self.net(x)
-        return output
-
-    def dqn_mse_loss(self, batch: Tuple[Tensor, Tensor]) -> Tensor:
-        """Calculates the mse loss using a mini batch from the replay buffer.
-
-        Args:
-            batch: current mini batch of replay data
-
-        Returns:
-            loss
-        """
-        states, actions, rewards, dones, next_states = batch
-
-        state_action_values = self.net(states).gather(1, actions.long().unsqueeze(-1)).squeeze(-1)
-
+def select_action(state):
+    global steps_done
+    sample = random.random()
+    eps_threshold = EPS_END + (EPS_START - EPS_END) * \
+        math.exp(-1. * steps_done / EPS_DECAY)
+    steps_done += 1
+    if sample > eps_threshold:
         with torch.no_grad():
-            next_state_values = self.target_net(next_states).max(1)[0]
-            next_state_values[dones] = 0.0
-            next_state_values = next_state_values.detach()
+            # t.max(1) will return the largest column value of each row.
+            # second column on max result is index of where max element was
+            # found, so we pick action with the larger expected reward.
+            return policy_net(state).max(1)[1].view(1, 1)
+    else:
+        return torch.tensor([[env.action_space.sample()]], device=device, dtype=torch.long)
 
-        expected_state_action_values = next_state_values * self.hparams.gamma + rewards
 
-        return nn.MSELoss()(state_action_values, expected_state_action_values)
+episode_durations = []
 
-    def get_epsilon(self, start: int, end: int, frames: int) -> float:
-        if self.global_step > frames:
-            return end
-        return start - (self.global_step / frames) * (start - end)
 
-    def training_step(self, batch: Tuple[Tensor, Tensor], nb_batch) -> OrderedDict:
-        """Carries out a single step through the environment to update the replay buffer. Then calculates loss
-        based on the minibatch recieved.
+def plot_durations(show_result=False):
+    plt.figure(1)
+    durations_t = torch.tensor(episode_durations, dtype=torch.float)
+    if show_result:
+        plt.title('Result')
+    else:
+        plt.clf()
+        plt.title('Training...')
+    plt.xlabel('Episode')
+    plt.ylabel('Duration')
+    plt.plot(durations_t.numpy())
+    # Take 100 episode averages and plot them too
+    if len(durations_t) >= 100:
+        means = durations_t.unfold(0, 100, 1).mean(1).view(-1)
+        means = torch.cat((torch.zeros(99), means))
+        plt.plot(means.numpy())
 
-        Args:
-            batch: current mini batch of replay data
-            nb_batch: batch number
+    plt.pause(0.001)  # pause a bit so that plots are updated
+    if is_ipython:
+        if not show_result:
+            display.display(plt.gcf())
+            display.clear_output(wait=True)
+        else:
+            display.display(plt.gcf())
 
-        Returns:
-            Training loss and log metrics
-        """
-        device = self.get_device(batch)
-        epsilon = self.get_epsilon(self.hparams.eps_start, self.hparams.eps_end, self.hparams.eps_last_frame)
-        self.log("epsilon", epsilon)
 
-        # step through environment with agent
-        reward, done = self.agent.play_step(self.net, epsilon, device)
-        self.episode_reward += reward
-        self.log("episode reward", self.episode_reward)
+def optimize_model():
+    if len(memory) < BATCH_SIZE:
+        return
+    transitions = memory.sample(BATCH_SIZE)
+    # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
+    # detailed explanation). This converts batch-array of Transitions
+    # to Transition of batch-arrays.
+    batch = Transition(*zip(*transitions))
 
-        # calculates training loss
-        loss = self.dqn_mse_loss(batch)
+    # Compute a mask of non-final states and concatenate the batch elements
+    # (a final state would've been the one after which simulation ended)
+    non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
+                                          batch.next_state)), device=device, dtype=torch.bool)
+    non_final_next_states = torch.cat([s for s in batch.next_state
+                                                if s is not None])
+    state_batch = torch.cat(batch.state)
+    action_batch = torch.cat(batch.action)
+    reward_batch = torch.cat(batch.reward)
+
+    # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
+    # columns of actions taken. These are the actions which would've been taken
+    # for each batch state according to policy_net
+    state_action_values = policy_net(state_batch).gather(1, action_batch)
+
+    # Compute V(s_{t+1}) for all next states.
+    # Expected values of actions for non_final_next_states are computed based
+    # on the "older" target_net; selecting their best reward with max(1)[0].
+    # This is merged based on the mask, such that we'll have either the expected
+    # state value or 0 in case the state was final.
+    next_state_values = torch.zeros(BATCH_SIZE, device=device)
+    with torch.no_grad():
+        next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0]
+    # Compute the expected Q values
+    expected_state_action_values = (next_state_values * GAMMA) + reward_batch
+
+    # Compute Huber loss
+    criterion = nn.SmoothL1Loss()
+    loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
+
+    # Optimize the model
+    optimizer.zero_grad()
+    loss.backward()
+    # In-place gradient clipping
+    torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
+    optimizer.step()
+
+
+if torch.cuda.is_available():
+    num_episodes = 600
+else:
+    num_episodes = 50
+
+for i_episode in range(num_episodes):
+    # Initialize the environment and get it's state
+    state, info = env.reset()
+    state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
+    for t in count():
+        action = select_action(state)
+        observation, reward, terminated, truncated, _ = env.step(action.item())
+        reward = torch.tensor([reward], device=device)
+        done = terminated or truncated
+
+        if terminated:
+            next_state = None
+        else:
+            next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
+
+        # Store the transition in memory
+        memory.push(state, action, next_state, reward)
+
+        # Move to the next state
+        state = next_state
+
+        # Perform one step of the optimization (on the policy network)
+        optimize_model()
+
+        # Soft update of the target network's weights
+        # θ′ ← τ θ + (1 −τ )θ′
+        target_net_state_dict = target_net.state_dict()
+        policy_net_state_dict = policy_net.state_dict()
+        for key in policy_net_state_dict:
+            target_net_state_dict[key] = policy_net_state_dict[key]*TAU + target_net_state_dict[key]*(1-TAU)
+        target_net.load_state_dict(target_net_state_dict)
 
         if done:
-            self.total_reward = self.episode_reward
-            self.episode_reward = 0
+            episode_durations.append(t + 1)
+            plot_durations()
+            break
 
-        # Soft update of target network
-        if self.global_step % self.hparams.sync_rate == 0:
-            self.target_net.load_state_dict(self.net.state_dict())
-
-        self.log_dict(
-            {
-                "reward": reward,
-                "train_loss": loss,
-            }
-        )
-        self.log("total_reward", self.total_reward, prog_bar=True)
-        self.log("steps", self.global_step, logger=False, prog_bar=True)
-
-        return loss
-
-    def configure_optimizers(self) -> List[Optimizer]:
-        """Initialize Adam optimizer."""
-        optimizer = Adam(self.net.parameters(), lr=self.hparams.lr)
-        return optimizer
-
-    def __dataloader(self) -> DataLoader:
-        """Initialize the Replay Buffer dataset used for retrieving experiences."""
-        dataset = RLDataset(self.buffer, self.hparams.episode_length)
-        dataloader = DataLoader(
-            dataset=dataset,
-            batch_size=self.hparams.batch_size,
-        )
-        return dataloader
-
-    def train_dataloader(self) -> DataLoader:
-        """Get train loader."""
-        return self.__dataloader()
-
-    def get_device(self, batch) -> str:
-        """Retrieve device currently being used by minibatch."""
-        return batch[0].device.index if self.on_gpu else "cpu"
-    
-model = DQNLightning()
-
-trainer = Trainer(
-    accelerator="auto",
-    devices=1 if torch.cuda.is_available() else None,  # limiting got iPython runs
-    max_epochs=150,
-    val_check_interval=50,
-    logger=TensorBoardLogger(save_dir="logs/"),
-)
-
-trainer.fit(model)
+print('Complete')
+plot_durations(show_result=True)
+plt.ioff()
+plt.show()
