@@ -14,7 +14,7 @@ import torch.optim as optim
 from tensorboardX import SummaryWriter
 
 
-DEFAULT_ENV_NAME = "PongNoFrameskip-v4"
+DEFAULT_ENV_NAME = "LunarLander"
 MEAN_REWARD_BOUND = 19
 
 GAMMA = 0.99
@@ -121,8 +121,7 @@ if __name__ == "__main__":
     parser.add_argument("--cuda", default=False,
                         action="store_true", help="Enable cuda")
     parser.add_argument("--env", default=DEFAULT_ENV_NAME,
-                        help="Name of the environment, default=" +
-                             DEFAULT_ENV_NAME)
+                        help="Name of the environment, default=" + DEFAULT_ENV_NAME)
     args = parser.parse_args()
     device = torch.device("cuda" if args.cuda else "cpu")
 

@@ -6,12 +6,12 @@ import matplotlib.pyplot as plt
 from collections import namedtuple, deque
 from itertools import count
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
-env = gym.make("CartPole-v1")
 
 # set up matplotlib
 is_ipython = 'inline' in matplotlib.get_backend()
@@ -26,6 +26,38 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
 
+class PongWrapperEnv(gym.Wrapper):
+    def __init__(self, env=None, skip=1):
+        """Return only every `skip`-th frame"""
+        super(PongWrapperEnv, self).__init__(env)
+        # most recent raw observations (for max pooling across time steps)
+        self._obs_buffer = deque(maxlen=2)
+        self._skip = skip
+
+    def transform(self, ):
+        return 
+    
+    def step(self, action):
+        total_reward = 0.0
+        done = None
+        for _ in range(self._skip):
+            obs, reward, done, info = self.env.step(action)
+            self._obs_buffer.append(obs)
+            total_reward += reward
+            if done:
+                break
+        max_frame = np.max(np.stack(self._obs_buffer), axis=0)
+        import pdb; pdb.set_trace()
+        return max_frame, total_reward, done, info
+    
+    def reset(self):
+        """Clear past frame buffer and init. to first obs. from inner env."""
+        self._obs_buffer.clear()
+        obs = self.env.reset()
+        self._obs_buffer.append(obs)
+        return obs
+
+env = PongWrapperEnv(gym.make("PongNoFrameskip-v4"))
 
 class ReplayMemory(object):
 
@@ -191,6 +223,7 @@ for i_episode in range(num_episodes):
     # Initialize the environment and get it's state
     state, info = env.reset()
     state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
+    import pdb; pdb.set_trace()
     for t in count():
         action = select_action(state)
         observation, reward, terminated, truncated, _ = env.step(action.item())
