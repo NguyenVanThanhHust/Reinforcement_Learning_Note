@@ -47,7 +47,6 @@ class PongWrapperEnv(gym.Wrapper):
             if done:
                 break
         max_frame = np.max(np.stack(self._obs_buffer), axis=0)
-        import pdb; pdb.set_trace()
         return max_frame, total_reward, done, info
     
     def reset(self):
@@ -223,7 +222,6 @@ for i_episode in range(num_episodes):
     # Initialize the environment and get it's state
     state, info = env.reset()
     state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
-    import pdb; pdb.set_trace()
     for t in count():
         action = select_action(state)
         observation, reward, terminated, truncated, _ = env.step(action.item())
